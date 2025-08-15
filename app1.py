@@ -78,8 +78,7 @@ if "messages" not in st.session_state:
     )
 
     pathway_explaination = (
-        "Pathway is a high-throughput, low-latency data processing framework "
-        "that handles live data & streaming for you."
+        "RAG, or Retrieval-Augmented Generation, is a technique that enhances the performance of large language models (LLMs) by integrating them with an external information retrieval system."
     )
     DEFAULT_MESSAGES = [
         ChatMessage(role=MessageRole.USER, content="What is RAG?"),
