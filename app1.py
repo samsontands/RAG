@@ -28,60 +28,33 @@ DRIVE_URL = os.environ.get(
 )
 
 st.set_page_config(
-    page_title="Realtime Document AI pipelines", page_icon="./app/static/favicon.ico"
+    page_title="Realtime Document AI pipelines",
+    page_icon="./app/static/favicon.ico"
 )
 
-# ---- Sidebar ----
+# ---- Sidebar (Google Drive only) ----
 with st.sidebar:
     if PATHWAY_HOST == DEFAULT_PATHWAY_HOST:
         st.markdown("**Add Your Files to Google Drive**")
-        st.write(
-            f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})"
-        )
+        st.write(f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})")
         st.markdown(
             "*These go to the **public Pathway sandbox**. Do not upload confidential files.*"
         )
-
         st.write("---")
-        st.write(
-            "You can also upload to the demo SharePoint folder "
-            "[here](https://navalgo.sharepoint.com/:f:/s/ConnectorSandbox/EgBe-VQr9h1IuR7VBeXsRfIBuOYhv-8z02_6zf4uTH8WbQ?e=YmlA05)."
-        )
-
-        st.markdown(
-            "[View code on GitHub.](https://github.com/pathway-labs/chat-realtime-sharepoint-gdrive)"
-        )
-        st.markdown(
-            "Pathway pipelines ingest documents from Google Drive and SharePoint in real time and keep the index fresh for RAG."
-        )
     else:
         st.markdown(f"**Connected to:** {PATHWAY_HOST}")
-        st.markdown(
-            "[View code on GitHub.](https://github.com/pathway-labs/chat-realtime-sharepoint-gdrive)"
-        )
 
+    # Optional: lightweight “how it works” copy (no logos/marketing links)
     st.markdown(
-        """**Ready to build your own?**
-
-Our [docs](https://pathway.com/developers/showcases/llamaindex-pathway/) walk through creating custom pipelines with LlamaIndex.
-
-**Want a hosted version?**
-
-Check out our [hosted document pipelines](https://cloud.pathway.com/docindex)."""
+        """**How this works**  
+        This demo indexes documents from Google Drive in real time and keeps the index fresh for RAG."""
     )
 
 # ---- Load .env (for OPENAI_API_KEY, etc.) ----
 load_dotenv()
 
-# ---- Header / badges ----
-st.write("## Chat with all your enterprise documents realtime ⚡ in Google Drive & SharePoint")
-htt = """
-<p>
-    <span> Built With: </span>
-    <img src="./app/static/combinedhosted.png" width="300" alt="Stack logos">
-</p>
-"""
-st.markdown(htt, unsafe_allow_html=True)
+# ---- Header (Google Drive only; removed stack logos image) ----
+st.write("## Chat with your Google Drive documents in real time ⚡")
 
 # ---- Per-session setup ----
 if "messages" not in st.session_state:
@@ -106,10 +79,12 @@ if "messages" not in st.session_state:
         "Pathway is a high-throughput, low-latency data processing framework "
         "that handles live data & streaming for you."
     )
+
     DEFAULT_MESSAGES = [
         ChatMessage(role=MessageRole.USER, content="What is Pathway?"),
         ChatMessage(role=MessageRole.ASSISTANT, content=pathway_explaination),
     ]
+
     chat_engine.chat_history.clear()
     for msg in DEFAULT_MESSAGES:
         chat_engine.chat_history.append(msg)
@@ -125,7 +100,7 @@ last_modified_time, last_indexed_files = get_inputs()
 df = pd.DataFrame(last_indexed_files, columns=[last_modified_time, "status"])
 if "status" in df.columns and df.status.isna().any():
     del df["status"]
-df.set_index(df.columns[0])
+df = df.set_index(df.columns[0])
 st.dataframe(df, hide_index=True, height=150, use_container_width=True)
 
 cs = st.columns([1, 1, 1, 1], gap="large")
@@ -176,10 +151,10 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 )
 
             sources_text = ", ".join(sources)
-            response_text = (
-                response.response
-                + (f"\n\nDocuments looked up to obtain this answer: {sources_text}" if sources else "")
+            response_text = response.response + (
+                f"\n\nDocuments looked up to obtain this answer: {sources_text}"
+                if sources
+                else ""
             )
             st.write(response_text)
-
             st.session_state.messages.append({"role": "assistant", "content": response_text})
