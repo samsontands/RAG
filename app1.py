@@ -21,6 +21,13 @@ logging.basicConfig(
 
 init_pw_log_config()
 
+# =========================
+# UI FLAGS (functionality stays!)
+# =========================
+SHOW_SHAREPOINT_UI = False
+SHOW_STACK_LOGOS_UI = False
+SHOW_MARKETING_LINKS_UI = False
+
 # ---- Where users should upload (public demo folder by default) ----
 DRIVE_URL = os.environ.get(
     "GDRIVE_FOLDER_URL",
@@ -32,31 +39,36 @@ st.set_page_config(
     page_icon="./app/static/favicon.ico"
 )
 
-# ---- Sidebar (Google Drive only) ----
+# ---- Sidebar (Google Drive only in UI) ----
 with st.sidebar:
     if PATHWAY_HOST == DEFAULT_PATHWAY_HOST:
         st.markdown("**Add Your Files to Google Drive**")
         st.write(f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})")
         st.markdown(
-            "*These go to the **public Pathway sandbox**. Do not upload confidential files.*"
+            "*These go to the **public sandbox**. Do not upload confidential files.*"
         )
         st.write("---")
+        # (Intentionally DO NOT show any SharePoint link here)
     else:
         st.markdown(f"**Connected to:** {PATHWAY_HOST}")
 
-    # Optional: lightweight “how it works” copy (no logos/marketing links)
+    # Optional docs line without naming SharePoint
     st.markdown(
-        """**How this works**  
-        This demo indexes documents from Google Drive in real time and keeps the index fresh for RAG."""
+        """**How it works**  
+        This app indexes documents from Google Drive in real time and keeps the index fresh for RAG."""
     )
 
 # ---- Load .env (for OPENAI_API_KEY, etc.) ----
 load_dotenv()
 
-# ---- Header (Google Drive only; removed stack logos image) ----
+# ---- Header (no stack logos; Google Drive wording only) ----
 st.write("## Chat with your Google Drive documents in real time ⚡")
+if SHOW_STACK_LOGOS_UI:
+    htt = """<p><span> Built With: </span>
+    <img src="./app/static/combinedhosted.png" width="300" alt="Stack logos"></p>"""
+    st.markdown(htt, unsafe_allow_html=True)
 
-# ---- Per-session setup ----
+# ---- Per-session setup (unchanged; keeps all functionality) ----
 if "messages" not in st.session_state:
     if "session_id" not in st.session_state:
         session_id = "uuid-" + str(uuid.uuid4())
@@ -95,7 +107,7 @@ if "messages" not in st.session_state:
     st.session_state.chat_engine = chat_engine
     st.session_state.vector_client = vector_client
 
-# ---- Show latest indexed files from the vector store ----
+# ---- Latest indexed files (unchanged) ----
 last_modified_time, last_indexed_files = get_inputs()
 df = pd.DataFrame(last_indexed_files, columns=[last_modified_time, "status"])
 if "status" in df.columns and df.status.isna().any():
@@ -126,7 +138,7 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# ---- Generate answer ----
+# ---- Generate answer (unchanged) ----
 if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
