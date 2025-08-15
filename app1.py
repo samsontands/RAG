@@ -82,7 +82,7 @@ if "messages" not in st.session_state:
         "that handles live data & streaming for you."
     )
     DEFAULT_MESSAGES = [
-        ChatMessage(role=MessageRole.USER, content="What is Pathway?"),
+        ChatMessage(role=MessageRole.USER, content="What is RAG?"),
         ChatMessage(role=MessageRole.ASSISTANT, content=pathway_explaination),
     ]
     chat_engine.chat_history.clear()
