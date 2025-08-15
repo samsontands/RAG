@@ -1,90 +1,185 @@
-# app.py — minimal chat + Google Drive link (Streamlit Secrets)
-
+import json
+import logging
 import os
 import uuid
-import json
+
+import pandas as pd
 import streamlit as st
+from dotenv import load_dotenv
+from endpoint_utils import get_inputs
+from llama_index.llms.types import ChatMessage, MessageRole
+from log_utils import init_pw_log_config
+from rag import DEFAULT_PATHWAY_HOST, PATHWAY_HOST, chat_engine, vector_client
+from streamlit.web.server.websocket_headers import _get_websocket_headers
+from traceloop.sdk import Traceloop
 
-# If your rag module (or SDKs) read settings from env at import time,
-# copy from st.secrets → os.environ BEFORE importing rag.
-def _env_from_secrets(keys: list[str]):
-    for k in keys:
-        v = st.secrets.get(k)
-        if v:
-            os.environ[k] = str(v)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
-_env_from_secrets([
-    "OPENAI_API_KEY",         # if your rag stack needs it
-    "PATHWAY_HOST",           # if rag reads this at import-time
-    "ANTHROPIC_API_KEY",      # optional
-    "AZURE_OPENAI_API_KEY",   # optional
-    "AZURE_OPENAI_ENDPOINT",  # optional
-])
+init_pw_log_config()
 
-# Import your RAG pieces AFTER env is set
-from rag import DEFAULT_PATHWAY_HOST, PATHWAY_HOST, chat_engine  # noqa: E402
-
-st.set_page_config(page_title="Realtime Document Chat", page_icon="🗂️")
-
-# -------- Sidebar: Google Drive link only --------
-DRIVE_URL = st.secrets.get(
+# ---- Where users should upload (public demo folder by default) ----
+DRIVE_URL = os.environ.get(
     "GDRIVE_FOLDER_URL",
     "https://drive.google.com/drive/u/0/folders/1cULDv2OaViJBmOfG5WB0oWcgayNrGtVs",
 )
 
+st.set_page_config(
+    page_title="Realtime Document AI pipelines", page_icon="./app/static/favicon.ico"
+)
+
+# ---- Sidebar ----
 with st.sidebar:
-    st.markdown("### Add Your Files to Google Drive")
-    st.write(f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})")
-    if os.environ.get("PATHWAY_HOST", "") == DEFAULT_PATHWAY_HOST:
-        st.caption("These go to the public Pathway sandbox. Don’t upload confidential files.")
+    if PATHWAY_HOST == DEFAULT_PATHWAY_HOST:
+        st.markdown("**Add Your Files to Google Drive**")
+        st.write(
+            f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})"
+        )
+        st.markdown(
+            "*These go to the **public Pathway sandbox**. Do not upload confidential files.*"
+        )
+
+        st.write("---")
+        st.write(
+            "You can also upload to the demo SharePoint folder "
+            "[here](https://navalgo.sharepoint.com/:f:/s/ConnectorSandbox/EgBe-VQr9h1IuR7VBeXsRfIBuOYhv-8z02_6zf4uTH8WbQ?e=YmlA05)."
+        )
+
+        st.markdown(
+            "[View code on GitHub.](https://github.com/pathway-labs/chat-realtime-sharepoint-gdrive)"
+        )
+        st.markdown(
+            "Pathway pipelines ingest documents from Google Drive and SharePoint in real time and keep the index fresh for RAG."
+        )
     else:
-        st.caption(f"Connected to: {os.environ.get('PATHWAY_HOST')}")
+        st.markdown(f"**Connected to:** {PATHWAY_HOST}")
+        st.markdown(
+            "[View code on GitHub.](https://github.com/pathway-labs/chat-realtime-sharepoint-gdrive)"
+        )
 
-# -------- Simple header --------
-st.write("## Chat with your documents (Google Drive & SharePoint)")
+    st.markdown(
+        """**Ready to build your own?**
 
-# -------- Session bootstrapping --------
-if "session_id" not in st.session_state:
-    st.session_state.session_id = "uuid-" + str(uuid.uuid4())
+Our [docs](https://pathway.com/developers/showcases/llamaindex-pathway/) walk through creating custom pipelines with LlamaIndex.
 
+**Want a hosted version?**
+
+Check out our [hosted document pipelines](https://cloud.pathway.com/docindex)."""
+    )
+
+# ---- Load .env (for OPENAI_API_KEY, etc.) ----
+load_dotenv()
+
+# ---- Header / badges ----
+st.write("## Chat with all your enterprise documents realtime ⚡ in Google Drive & SharePoint")
+htt = """
+<p>
+    <span> Built With: </span>
+    <img src="./app/static/combinedhosted.png" width="300" alt="Stack logos">
+</p>
+"""
+st.markdown(htt, unsafe_allow_html=True)
+
+# ---- Per-session setup ----
 if "messages" not in st.session_state:
-    # Optional: seed a short default exchange so the window isn't empty
-    st.session_state.messages = [
-        {"role": "assistant", "content": "Hi! Ask me anything about your uploaded documents."}
+    if "session_id" not in st.session_state:
+        session_id = "uuid-" + str(uuid.uuid4())
+        logging.info(json.dumps({"_type": "set_session_id", "session_id": session_id}))
+        Traceloop.set_association_properties({"session_id": session_id})
+        st.session_state["session_id"] = session_id
+
+    headers = _get_websocket_headers()
+    logging.info(
+        json.dumps(
+            {
+                "_type": "set_headers",
+                "headers": headers,
+                "session_id": st.session_state.get("session_id", "NULL_SESS"),
+            }
+        )
+    )
+
+    pathway_explaination = (
+        "Pathway is a high-throughput, low-latency data processing framework "
+        "that handles live data & streaming for you."
+    )
+    DEFAULT_MESSAGES = [
+        ChatMessage(role=MessageRole.USER, content="What is Pathway?"),
+        ChatMessage(role=MessageRole.ASSISTANT, content=pathway_explaination),
     ]
+    chat_engine.chat_history.clear()
+    for msg in DEFAULT_MESSAGES:
+        chat_engine.chat_history.append(msg)
 
-# -------- Chat input --------
-user_text = st.chat_input("Your question")
-if user_text:
-    st.session_state.messages.append({"role": "user", "content": user_text})
+    st.session_state.messages = [
+        {"role": msg.role, "content": msg.content} for msg in chat_engine.chat_history
+    ]
+    st.session_state.chat_engine = chat_engine
+    st.session_state.vector_client = vector_client
 
-# -------- Render chat history --------
-for m in st.session_state.messages:
-    with st.chat_message(m["role"]):
-        st.write(m["content"])
+# ---- Show latest indexed files from the vector store ----
+last_modified_time, last_indexed_files = get_inputs()
+df = pd.DataFrame(last_indexed_files, columns=[last_modified_time, "status"])
+if "status" in df.columns and df.status.isna().any():
+    del df["status"]
+df.set_index(df.columns[0])
+st.dataframe(df, hide_index=True, height=150, use_container_width=True)
 
-# -------- Generate answer (only if last message is from user) --------
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+cs = st.columns([1, 1, 1, 1], gap="large")
+with cs[-1]:
+    st.button("⟳ Refresh", use_container_width=True)
+
+# ---- Chat input ----
+prompt = st.chat_input("Your question")
+if prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    logging.info(
+        json.dumps(
+            {
+                "_type": "user_prompt",
+                "prompt": prompt,
+                "session_id": st.session_state.get("session_id", "NULL_SESS"),
+            }
+        )
+    )
+
+# ---- Render history ----
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
+
+# ---- Generate answer ----
+if st.session_state.messages[-1]["role"] != "assistant":
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
-            prompt = st.session_state.messages[-1]["content"]
-            response = chat_engine.chat(prompt)
-
-            # Try to collect short source names (optional)
+            response = st.session_state.chat_engine.chat(prompt)
             sources = []
             try:
-                for node in getattr(response, "source_nodes", []) or []:
-                    full_path = node.metadata.get("path", node.metadata.get("name"))
+                for source in getattr(response, "source_nodes", []) or []:
+                    full_path = source.metadata.get("path", source.metadata.get("name"))
                     if full_path:
                         name = f"`{full_path.split('/')[-1]}`"
                         if name not in sources:
                             sources.append(name)
-            except Exception:
-                pass
+            except AttributeError:
+                logging.error(
+                    json.dumps(
+                        {
+                            "_type": "error",
+                            "error": f"No source (`source_nodes`) found in response: {str(response)}",
+                            "session_id": st.session_state.get("session_id", "NULL_SESS"),
+                        }
+                    )
+                )
 
-            txt = response.response
-            if sources:
-                txt += "\n\nDocs consulted: " + ", ".join(sources)
+            sources_text = ", ".join(sources)
+            response_text = (
+                response.response
+                + (f"\n\nDocuments looked up to obtain this answer: {sources_text}" if sources else "")
+            )
+            st.write(response_text)
 
-            st.write(txt)
-            st.session_state.messages.append({"role": "assistant", "content": txt})
+            st.session_state.messages.append({"role": "assistant", "content": response_text})
