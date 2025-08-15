@@ -21,13 +21,6 @@ logging.basicConfig(
 
 init_pw_log_config()
 
-# =========================
-# UI FLAGS (functionality stays!)
-# =========================
-SHOW_SHAREPOINT_UI = False
-SHOW_STACK_LOGOS_UI = False
-SHOW_MARKETING_LINKS_UI = False
-
 # ---- Where users should upload (public demo folder by default) ----
 DRIVE_URL = os.environ.get(
     "GDRIVE_FOLDER_URL",
@@ -35,8 +28,7 @@ DRIVE_URL = os.environ.get(
 )
 
 st.set_page_config(
-    page_title="Realtime Document AI pipelines",
-    page_icon="./app/static/favicon.ico"
+    page_title="Realtime Document AI pipelines", page_icon="./app/static/favicon.ico"
 )
 
 # ---- Sidebar (Google Drive only in UI) ----
@@ -45,30 +37,27 @@ with st.sidebar:
         st.markdown("**Add Your Files to Google Drive**")
         st.write(f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})")
         st.markdown(
-            "*These go to the **public sandbox**. Do not upload confidential files.*"
+            "*These go to the **public Pathway sandbox**. Do not upload confidential files.*"
         )
         st.write("---")
-        # (Intentionally DO NOT show any SharePoint link here)
     else:
         st.markdown(f"**Connected to:** {PATHWAY_HOST}")
 
-    # Optional docs line without naming SharePoint
+    # Keep generic docs, no SharePoint mentions
     st.markdown(
-        """**How it works**  
-        This app indexes documents from Google Drive in real time and keeps the index fresh for RAG."""
+        """**Ready to build your own?**
+
+Our [docs](https://pathway.com/developers/showcases/llamaindex-pathway/) walk through creating custom pipelines with LlamaIndex.
+"""
     )
 
 # ---- Load .env (for OPENAI_API_KEY, etc.) ----
 load_dotenv()
 
-# ---- Header (no stack logos; Google Drive wording only) ----
+# ---- Header (no SharePoint; no stack logos) ----
 st.write("## Chat with your Google Drive documents in real time ⚡")
-if SHOW_STACK_LOGOS_UI:
-    htt = """<p><span> Built With: </span>
-    <img src="./app/static/combinedhosted.png" width="300" alt="Stack logos"></p>"""
-    st.markdown(htt, unsafe_allow_html=True)
 
-# ---- Per-session setup (unchanged; keeps all functionality) ----
+# ---- Per-session setup ----
 if "messages" not in st.session_state:
     if "session_id" not in st.session_state:
         session_id = "uuid-" + str(uuid.uuid4())
@@ -84,89 +73,3 @@ if "messages" not in st.session_state:
                 "headers": headers,
                 "session_id": st.session_state.get("session_id", "NULL_SESS"),
             }
-        )
-    )
-
-    pathway_explaination = (
-        "Pathway is a high-throughput, low-latency data processing framework "
-        "that handles live data & streaming for you."
-    )
-
-    DEFAULT_MESSAGES = [
-        ChatMessage(role=MessageRole.USER, content="What is Pathway?"),
-        ChatMessage(role=MessageRole.ASSISTANT, content=pathway_explaination),
-    ]
-
-    chat_engine.chat_history.clear()
-    for msg in DEFAULT_MESSAGES:
-        chat_engine.chat_history.append(msg)
-
-    st.session_state.messages = [
-        {"role": msg.role, "content": msg.content} for msg in chat_engine.chat_history
-    ]
-    st.session_state.chat_engine = chat_engine
-    st.session_state.vector_client = vector_client
-
-# ---- Latest indexed files (unchanged) ----
-last_modified_time, last_indexed_files = get_inputs()
-df = pd.DataFrame(last_indexed_files, columns=[last_modified_time, "status"])
-if "status" in df.columns and df.status.isna().any():
-    del df["status"]
-df = df.set_index(df.columns[0])
-st.dataframe(df, hide_index=True, height=150, use_container_width=True)
-
-cs = st.columns([1, 1, 1, 1], gap="large")
-with cs[-1]:
-    st.button("⟳ Refresh", use_container_width=True)
-
-# ---- Chat input ----
-prompt = st.chat_input("Your question")
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    logging.info(
-        json.dumps(
-            {
-                "_type": "user_prompt",
-                "prompt": prompt,
-                "session_id": st.session_state.get("session_id", "NULL_SESS"),
-            }
-        )
-    )
-
-# ---- Render history ----
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
-
-# ---- Generate answer (unchanged) ----
-if st.session_state.messages[-1]["role"] != "assistant":
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            response = st.session_state.chat_engine.chat(prompt)
-            sources = []
-            try:
-                for source in getattr(response, "source_nodes", []) or []:
-                    full_path = source.metadata.get("path", source.metadata.get("name"))
-                    if full_path:
-                        name = f"`{full_path.split('/')[-1]}`"
-                        if name not in sources:
-                            sources.append(name)
-            except AttributeError:
-                logging.error(
-                    json.dumps(
-                        {
-                            "_type": "error",
-                            "error": f"No source (`source_nodes`) found in response: {str(response)}",
-                            "session_id": st.session_state.get("session_id", "NULL_SESS"),
-                        }
-                    )
-                )
-
-            sources_text = ", ".join(sources)
-            response_text = response.response + (
-                f"\n\nDocuments looked up to obtain this answer: {sources_text}"
-                if sources
-                else ""
-            )
-            st.write(response_text)
-            st.session_state.messages.append({"role": "assistant", "content": response_text})
