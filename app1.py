@@ -31,11 +31,13 @@ st.set_page_config(
     page_title="Realtime Document AI pipelines", page_icon="./app/static/favicon.ico"
 )
 
-# ---- Sidebar (Google Drive only in UI) ----
+# ---- Sidebar ----
 with st.sidebar:
     if PATHWAY_HOST == DEFAULT_PATHWAY_HOST:
         st.markdown("**Add Your Files to Google Drive**")
-        st.write(f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})")
+        st.write(
+            f"➡️ [Open the Google Drive folder and upload files]({DRIVE_URL})"
+        )
         st.markdown(
             "*These go to the **public Pathway sandbox**. Do not upload confidential files.*"
         )
@@ -43,7 +45,6 @@ with st.sidebar:
     else:
         st.markdown(f"**Connected to:** {PATHWAY_HOST}")
 
-    # Keep generic docs without naming SharePoint
     st.markdown(
         """**Ready to build your own?**
 
@@ -53,8 +54,9 @@ Our [docs](https://pathway.com/developers/showcases/llamaindex-pathway/) walk th
 # ---- Load .env (for OPENAI_API_KEY, etc.) ----
 load_dotenv()
 
-# ---- Header (no SharePoint; no stack logos) ----
+# ---- Header / badges ----
 st.write("## Chat with your Google Drive documents in real time ⚡")
+# (Removed stack logos block)
 
 # ---- Per-session setup ----
 if "messages" not in st.session_state:
@@ -98,7 +100,7 @@ last_modified_time, last_indexed_files = get_inputs()
 df = pd.DataFrame(last_indexed_files, columns=[last_modified_time, "status"])
 if "status" in df.columns and df.status.isna().any():
     del df["status"]
-df = df.set_index(df.columns[0])  # make set_index effective
+df.set_index(df.columns[0])  # (left as-is, per your request)
 st.dataframe(df, hide_index=True, height=150, use_container_width=True)
 
 cs = st.columns([1, 1, 1, 1], gap="large")
@@ -149,10 +151,9 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 )
 
             sources_text = ", ".join(sources)
-            response_text = response.response + (
-                f"\n\nDocuments looked up to obtain this answer: {sources_text}"
-                if sources
-                else ""
+            response_text = (
+                response.response
+                + (f"\n\nDocuments looked up to obtain this answer: {sources_text}" if sources else "")
             )
             st.write(response_text)
 
