@@ -43,12 +43,11 @@ with st.sidebar:
     else:
         st.markdown(f"**Connected to:** {PATHWAY_HOST}")
 
-    # Keep generic docs, no SharePoint mentions
+    # Keep generic docs without naming SharePoint
     st.markdown(
         """**Ready to build your own?**
 
-Our [docs](https://pathway.com/developers/showcases/llamaindex-pathway/) walk through creating custom pipelines with LlamaIndex.
-"""
+Our [docs](https://pathway.com/developers/showcases/llamaindex-pathway/) walk through creating custom pipelines with LlamaIndex."""
     )
 
 # ---- Load .env (for OPENAI_API_KEY, etc.) ----
@@ -99,7 +98,7 @@ last_modified_time, last_indexed_files = get_inputs()
 df = pd.DataFrame(last_indexed_files, columns=[last_modified_time, "status"])
 if "status" in df.columns and df.status.isna().any():
     del df["status"]
-df = df.set_index(df.columns[0])  # assign the index
+df = df.set_index(df.columns[0])  # make set_index effective
 st.dataframe(df, hide_index=True, height=150, use_container_width=True)
 
 cs = st.columns([1, 1, 1, 1], gap="large")
@@ -150,9 +149,10 @@ if st.session_state.messages[-1]["role"] != "assistant":
                 )
 
             sources_text = ", ".join(sources)
-            response_text = (
-                response.response
-                + (f"\n\nDocuments looked up to obtain this answer: {sources_text}" if sources else "")
+            response_text = response.response + (
+                f"\n\nDocuments looked up to obtain this answer: {sources_text}"
+                if sources
+                else ""
             )
             st.write(response_text)
 
